@@ -26,6 +26,8 @@ spec:
         app.kubernetes.io/env: prod
         creator: wangjie
     spec:
+      imagePullSecrets:
+        - name: acr-regcred
       containers:
         - name: openapi-platform
           image: 01ai-registry.cn-shanghai.cr.aliyuncs.com/data-risk/openapi-platform:IMAGE_TAG
