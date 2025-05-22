@@ -226,6 +226,10 @@ func migrateDB() error {
 	if err != nil {
 		return err
 	}
+	err = DB.AutoMigrate(&LogDetail{})
+	if err != nil {
+		return err
+	}
 	err = DB.AutoMigrate(&Midjourney{})
 	if err != nil {
 		return err

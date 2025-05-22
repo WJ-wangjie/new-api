@@ -1,0 +1,44 @@
+default:
+  tags:
+    - general-runner-shell
+
+stages:
+  - build
+  - triggers
+
+variables:
+  PROJECT_BASE_NAME: "."
+  DOCKER_REGISTRY: "${DOCKER_REGISTRY_HOST}/data-risk"
+  IMAGE_NAME: "openapi-platform"
+#  IMAGE_TAG: "${CI_COMMIT_BRANCH}-${CI_COMMIT_SHORT_SHA}"//这种写法在这里拿不到CI_COMMIT_BRANCH
+  IMAGE_TAG: "${CI_COMMIT_REF_NAME}-${CI_COMMIT_SHORT_SHA}"
+  SERVER_NAME: "openapi-platform"
+
+workflow:
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+    - if: $CI_COMMIT_REF_NAME == "main"  # 如果是 main 分支
+
+# 公共镜像构建任务
+build-image:
+  stage: build
+  interruptible: true  # 子任务也会被中断
+  timeout: 10 minutes  # 设置job超时时间为10分钟
+  retry: 2  # 设置job重试次数为2次
+  script:
+    - docker build -t ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} -f ${PROJECT_BASE_NAME}/Dockerfile .
+    - docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+
+openapi-platform-dev:
+  stage: triggers
+  trigger:
+    include: .gitlab-ci-sgp-dev.yml
+    strategy: depend
+
+openapi-platform-prod:
+  stage: triggers
+  trigger:
+    include: .gitlab-ci-sgp-prod.yml
+    strategy: depend
+  only:
+    - main
