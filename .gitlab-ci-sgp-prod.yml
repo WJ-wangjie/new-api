@@ -14,11 +14,11 @@ deploy-to-prod:
   retry: 2  # 设置job重试次数为2次
   #  when: manual
   variables:
-    DEPLOYMENT: dev
-    NAMESPACE: risk-sgp-dev
+    DEPLOYMENT: prod
+    NAMESPACE: risk-sgp-prod
   script:
     - kubectl config get-contexts
-    - kubectl config use-context data/gitlab-agent:ali-sgp-dev
+    - kubectl config use-context data/gitlab-agent:ali-sgp-prod
     - kubectl get pod -n $NAMESPACE
     # ✅ 创建或更新 ConfigMap
     - |

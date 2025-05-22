@@ -2,7 +2,7 @@ kind: Deployment
 apiVersion: apps/v1
 metadata:
   name: openapi-platform
-  namespace: risk-sgp-dev
+  namespace: risk-sgp-prod
   labels:
     app.kubernetes.io/name: openapi-platform
     app.kubernetes.io/env: prod
@@ -77,10 +77,10 @@ kind: Ingress
 metadata:
   annotations: { }
   labels:
-    app.kubernetes.io/env: dev
+    app.kubernetes.io/env: prod
     app.kubernetes.io/name: openapi-platform
   name: openapi-platform
-  namespace: risk-sgp-dev
+  namespace: risk-sgp-prod
 spec:
   ingressClassName: mse-internal
   rules:
