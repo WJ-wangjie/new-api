@@ -146,13 +146,72 @@ func RecordConsumeLog(c *gin.Context, userId int, channelId int, promptTokens in
 		Group:            group,
 		Other:            otherStr,
 	}
+
+	// 读取响应内容
+	if customWriter, ok := c.Writer.(*common.CustomResponseWriter); ok {
+		// 使用 Bytes() 避免不必要的字符串复制
+		bodyBytes := customWriter.Body.Bytes()
+		fmt.Printf("ccccc: %s\n", bodyBytes)
+	} else {
+		// 处理转换失败的情况，使用日志库记录
+		common.LogError(c, "c.Writer 不是 *common.CustomResponseWriter 类型")
+	}
+
 	err := LOG_DB.Create(log).Error
 	if err != nil {
 		common.LogError(c, "failed to record log: "+err.Error())
 	}
+
+	// 读取请求体内容
+	//requestBodyBytes, err := io.ReadAll(c.Request.Body)
+	//if err != nil {
+	//	common.LogError(c, "Failed to read request body: "+err.Error())
+	//}
+	//// 重新设置请求体，以便后续处理
+	//c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBodyBytes))
+	//requestBody := string(requestBodyBytes)
+	requestBody := c.GetString("cachedBody")
+
+	// 读取响应内容
+	var responseBody string
+	if customWriter, ok := c.Writer.(*common.CustomResponseWriter); ok {
+		// 使用 Bytes() 避免不必要的字符串复制
+		responseBody = string(customWriter.Body.Bytes())
+	} else {
+		// 处理转换失败的情况，使用日志库记录
+		common.LogError(c, "c.Writer 不是 *common.CustomResponseWriter 类型")
+	}
+
+	logDetail := &LogDetail{
+		UserId:           userId,
+		Username:         username,
+		CreatedAt:        common.GetTimestamp(),
+		Type:             LogTypeConsume,
+		Content:          content,
+		PromptTokens:     promptTokens,
+		CompletionTokens: completionTokens,
+		TokenName:        tokenName,
+		ModelName:        modelName,
+		Quota:            quota,
+		ChannelId:        channelId,
+		TokenId:          tokenId,
+		UseTime:          useTimeSeconds,
+		IsStream:         isStream,
+		Group:            group,
+		Other:            otherStr,
+		RequestBody:      requestBody,
+		ResponseBody:     responseBody,
+	}
+
+	errDetail := LOG_DB.Create(logDetail).Error
+	if err != nil {
+		common.LogError(c, "failed to record log_detail: "+errDetail.Error())
+	}
+
+	//TODO  ?? quota  需要补个渠道数据
 	if common.DataExportEnabled {
 		gopool.Go(func() {
-			LogQuotaData(userId, username, modelName, quota, common.GetTimestamp(), promptTokens+completionTokens)
+			LogQuotaData(userId, username, channelId, modelName, quota, common.GetTimestamp(), promptTokens+completionTokens)
 		})
 	}
 }

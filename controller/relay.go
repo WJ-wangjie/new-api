@@ -67,6 +67,16 @@ func relayHandler(c *gin.Context, relayMode int) *dto.OpenAIErrorWithStatusCode 
 }
 
 func Relay(c *gin.Context) {
+	// 创建一个字节缓冲区来存储写入的数据
+	bodyBuffer := bytes.NewBuffer(nil)
+	// 创建自定义响应写入器
+	crw := &common.CustomResponseWriter{
+		ResponseWriter: c.Writer,
+		Body:           bodyBuffer,
+	}
+	// 替换默认的响应写入器
+	c.Writer = crw
+
 	relayMode := constant.Path2RelayMode(c.Request.URL.Path)
 	requestId := c.GetString(common.RequestIdKey)
 	group := c.GetString("group")
@@ -173,6 +183,16 @@ func WssRelay(c *gin.Context) {
 }
 
 func RelayClaude(c *gin.Context) {
+	// 创建一个字节缓冲区来存储写入的数据
+	bodyBuffer := bytes.NewBuffer(nil)
+	// 创建自定义响应写入器
+	crw := &common.CustomResponseWriter{
+		ResponseWriter: c.Writer,
+		Body:           bodyBuffer,
+	}
+	// 替换默认的响应写入器
+	c.Writer = crw
+
 	//relayMode := constant.Path2RelayMode(c.Request.URL.Path)
 	requestId := c.GetString(common.RequestIdKey)
 	group := c.GetString("group")
@@ -219,6 +239,7 @@ func RelayClaude(c *gin.Context) {
 func relayRequest(c *gin.Context, relayMode int, channel *model.Channel) *dto.OpenAIErrorWithStatusCode {
 	addUsedChannel(c, channel.Id)
 	requestBody, _ := common.GetRequestBody(c)
+	c.Set("cachedBody", string(requestBody)) // 存储到上下文
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBody))
 	return relayHandler(c, relayMode)
 }
@@ -226,6 +247,7 @@ func relayRequest(c *gin.Context, relayMode int, channel *model.Channel) *dto.Op
 func wssRequest(c *gin.Context, ws *websocket.Conn, relayMode int, channel *model.Channel) *dto.OpenAIErrorWithStatusCode {
 	addUsedChannel(c, channel.Id)
 	requestBody, _ := common.GetRequestBody(c)
+	c.Set("cachedBody", string(requestBody)) // 存储到上下文
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBody))
 	return relay.WssHelper(c, ws)
 }
@@ -233,6 +255,7 @@ func wssRequest(c *gin.Context, ws *websocket.Conn, relayMode int, channel *mode
 func claudeRequest(c *gin.Context, channel *model.Channel) *dto.ClaudeErrorWithStatusCode {
 	addUsedChannel(c, channel.Id)
 	requestBody, _ := common.GetRequestBody(c)
+	c.Set("cachedBody", string(requestBody)) // 存储到上下文
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBody))
 	return relay.ClaudeHelper(c)
 }

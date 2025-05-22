@@ -14,7 +14,7 @@ import {
 } from '@douyinfe/semi-ui';
 import { VChart } from '@visactor/react-vchart';
 import {
-  API,
+  API, getUserIdFromLocalStorage,
   isAdmin,
   showError,
   timestamp2string,
@@ -32,6 +32,7 @@ import {
 import { UserContext } from '../../context/User/index.js';
 import { StyleContext } from '../../context/Style/index.js';
 import { useTranslation } from 'react-i18next';
+import axios from "axios";
 
 const Detail = (props) => {
   const { t } = useTranslation();
@@ -43,6 +44,7 @@ const Detail = (props) => {
     username: '',
     token_name: '',
     model_name: '',
+    channel_name: '',
     start_timestamp:
       localStorage.getItem('data_export_default_time') === 'hour'
         ? timestamp2string(now.getTime() / 1000 - 86400)
@@ -67,6 +69,7 @@ const Detail = (props) => {
   );
   const [pieData, setPieData] = useState([{ type: 'null', value: '0' }]);
   const [lineData, setLineData] = useState([]);
+  const [lineDataChannel, setLineDataChannel] = useState([]);
   const [spec_pie, setSpecPie] = useState({
     type: 'pie',
     data: [
@@ -196,6 +199,81 @@ const Detail = (props) => {
       specified: modelColorMap,
     },
   });
+  const [spec_line_channel, setSpecLineChannel] = useState({
+    type: 'bar',
+    data: [
+      {
+        id: 'barData',
+        values: lineDataChannel,
+      },
+    ],
+    // 添加 groupField 字段，按 Channel 分组
+    // groupField: 'Channel',
+    xField: ['Time','Channel'],
+    yField: 'Usage',
+    seriesField: 'Model',
+    stack: true,
+    legends: {
+      visible: true,
+      selectMode: 'single',
+    },
+    title: {
+      visible: true,
+      text: t('模型消耗分布'),
+      subtext: `${t('总计')}：${renderQuota(consumeQuota, 2)}`,
+    },
+    bar: {
+      state: {
+        hover: {
+          stroke: '#000',
+          lineWidth: 1,
+        },
+      },
+    },
+    tooltip: {
+      mark: {
+        content: [
+          {
+            key: (datum) => '渠道:' + datum['Channel']+' 模型:'+datum['Model'],
+            value: (datum) => renderQuota(datum['rawQuota'] || 0, 4),
+          },
+        ],
+      },
+      dimension: {
+        content: [
+          {
+            key: (datum) => '渠道:' + datum['Channel']+' 模型:'+datum['Model'],
+            value: (datum) => datum['rawQuota'] || 0,
+          },
+        ],
+        updateContent: (array) => {
+          array.sort((a, b) => b.value - a.value);
+          let sum = 0;
+          for (let i = 0; i < array.length; i++) {
+            if (array[i].key == '其他') {
+              continue;
+            }
+            let value = parseFloat(array[i].value);
+            if (isNaN(value)) {
+              value = 0;
+            }
+            if (array[i].datum && array[i].datum.TimeSum) {
+              sum = array[i].datum.TimeSum;
+            }
+            array[i].value = renderQuota(value, 4);
+          }
+          array.unshift({
+            key: t('总计'),
+            value: renderQuota(sum, 4),
+          });
+          return array;
+        },
+      },
+    },
+    color: {
+      specified: modelColorMap,
+    },
+  });
 
   // 添加一个新的状态来存储模型-颜色映射
   const [modelColors, setModelColors] = useState({});
@@ -253,6 +331,7 @@ const Detail = (props) => {
   const updateChartData = (data) => {
     let newPieData = [];
     let newLineData = [];
+    let newLineDataChannel = [];
     let totalQuota = 0;
     let totalTimes = 0;
     let uniqueModels = new Set();
@@ -278,6 +357,7 @@ const Detail = (props) => {
 
     // 按时间和模型聚合数据
     let aggregatedData = new Map();
+    let aggregatedDataChannel = new Map();
     data.forEach((item) => {
       const timeKey = timestamp2string1(item.created_at, dataExportDefaultTime);
       const modelKey = item.model_name;
@@ -295,6 +375,25 @@ const Detail = (props) => {
       const existing = aggregatedData.get(key);
       existing.quota += item.quota;
       existing.count += item.count;
+
+      // 假设数据中有 channel_name 字段作为 Channel 信息
+      const channelKey = item.channel_name;
+      const keyChannel = `${timeKey}-${modelKey}-${channelKey}`;
+
+      if (!aggregatedDataChannel.has(keyChannel)) {
+        aggregatedDataChannel.set(keyChannel, {
+          time: timeKey,
+          model: modelKey,
+          channel: channelKey,
+          quota: 0,
+          count: 0,
+        });
+      }
+
+      const existingChannel = aggregatedDataChannel.get(keyChannel);
+      existingChannel.quota += item.quota;
+      existingChannel.count += item.count;
+
     });
 
     // 处理饼图数据
@@ -329,6 +428,9 @@ const Detail = (props) => {
       );
     }
 
+    // 收集所有唯一的渠道名称
+    let uniqueChannels = new Set(data.map((item) => item.channel_name));
+
     // 生成柱状图数据
     timePoints.forEach((time) => {
       // 为每个时间点收集所有模型的数据
@@ -359,9 +461,44 @@ const Detail = (props) => {
       newLineData.push(...timeData);
     });
 
+    // 生成分组带渠道的柱状图数据
+    timePoints.forEach((time) => {
+      uniqueChannels.forEach((channel) => {
+        // 为每个时间点和渠道收集所有模型的数据
+        let timeChannelData = Array.from(uniqueModels).map((model) => {
+          const key = `${time}-${model}-${channel}`;
+          const aggregatedChannel = aggregatedDataChannel.get(key);
+          return {
+            Time: time,
+            Model: model,
+            Channel: channel,
+            rawQuota: aggregatedChannel?.quota || 0,
+            Usage: aggregatedChannel?.quota ? getQuotaWithUnit(aggregatedChannel.quota, 4) : 0,
+          };
+        });
+
+        // 计算该时间点和渠道的总计
+        const timeChannelSum = timeChannelData.reduce((sum, item) => sum + item.rawQuota, 0);
+
+        // 按照 rawQuota 从大到小排序
+        timeChannelData.sort((a, b) => b.rawQuota - a.rawQuota);
+
+        // 为每个数据点添加该时间和渠道的总计
+        timeChannelData = timeChannelData.map((item) => ({
+          ...item,
+          TimeSum: timeChannelSum,
+        }));
+
+        // 将排序后的数据添加到 newLineData
+        newLineDataChannel.push(...timeChannelData);
+      });
+    });
+
+
     // 排序
     newPieData.sort((a, b) => b.value - a.value);
     newLineData.sort((a, b) => a.Time.localeCompare(b.Time));
+    newLineDataChannel.sort((a, b) => a.Time.localeCompare(b.Time));
 
     // 更新图表配置和数据
     setSpecPie((prev) => ({
@@ -388,11 +525,64 @@ const Detail = (props) => {
       },
     }));
 
+    setSpecLineChannel((prev) => ({
+      ...prev,
+      data: [{ id: 'barData', values: newLineDataChannel }],
+      title: {
+        ...prev.title,
+        subtext: `${t('总计')}：${renderQuota(totalQuota, 2)}`,
+      },
+      color: {
+        specified: newModelColors,
+      },
+    }));
+
     setPieData(newPieData);
     setLineData(newLineData);
+    setLineDataChannel(newLineDataChannel);
     setConsumeQuota(totalQuota);
     setTimes(totalTimes);
     setConsumeTokens(totalTokens);
+  };
+
+
+  const downloadQuotaData = async () => {
+    setLoading(true);
+    try {
+      let localStartTimestamp = Date.parse(start_timestamp) / 1000;
+      let localEndTimestamp = Date.parse(end_timestamp) / 1000;
+      let userId = getUserIdFromLocalStorage()
+      let url = `/api/data/download?username=${username}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`;
+
+      // 发送请求，设置响应类型为 blob
+      const res = await API.get(url, {
+        responseType: 'blob'
+      });
+
+      if (res.status !== 200) {
+        throw new Error('下载失败');
+      }
+      let filename = `对账单-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.xlsx`;
+
+      // 创建 Blob 对象
+      const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      // 创建临时 URL
+      const urlObject = window.URL.createObjectURL(blob);
+      // 创建 <a> 标签
+      const a = document.createElement('a');
+      a.href = urlObject;
+      a.download = filename;
+      // 添加到页面并触发点击
+      document.body.appendChild(a);
+      a.click();
+      // 清理资源
+      window.URL.revokeObjectURL(urlObject);
+      document.body.removeChild(a);
+    } catch (error) {
+      showError(error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getUserData = async () => {
@@ -488,6 +678,16 @@ const Detail = (props) => {
               >
                 {t('查询')}
               </Button>
+              <Button
+                label={t('下载')}
+                type='secondary'
+                htmlType='button'
+                onClick={downloadQuotaData}
+                loading={loading}
+                style={{ marginTop: 24 }}
+            >
+              {t('下载')}
+            </Button>
               <Form.Section></Form.Section>
             </>
           </Form>
@@ -566,6 +766,14 @@ const Detail = (props) => {
                     <VChart
                       spec={spec_pie}
                       option={{ mode: 'desktop-browser' }}
+                    />
+                  </div>
+                </Tabs.TabPane>
+                <Tabs.TabPane tab={t('调用次数分布-按渠道分组')} itemKey='3'>
+                  <div style={{ height: 500 }}>
+                    <VChart
+                        spec={spec_line_channel}
+                        option={{ mode: 'desktop-browser' }}
                     />
                   </div>
                 </Tabs.TabPane>

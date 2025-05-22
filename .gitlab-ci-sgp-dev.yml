@@ -1,0 +1,31 @@
+default:
+  tags:
+    - general-runner-shell
+
+workflow:
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+    - if: $CI_COMMIT_REF_NAME == "main"  # 如果是 main 分支
+
+deploy-to-dev:
+  stage: deploy
+  interruptible: true  # 子任务也会被中断
+  timeout: 2 minutes  # 设置job超时时间为10分钟
+  retry: 2  # 设置job重试次数为2次
+  #  when: manual
+  variables:
+    DEPLOYMENT: dev
+    NAMESPACE: risk-sgp-dev
+  script:
+    - kubectl config get-contexts
+    - kubectl config use-context data/gitlab-agent:ali-sgp-dev
+    - kubectl get pod -n $NAMESPACE
+    # ✅ 创建或更新 ConfigMap
+    - |
+      kubectl create configmap ${SERVER_NAME}-env-config \
+        --from-env-file=${PROJECT_BASE_NAME}/.env \
+        -n $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+    # ✅ 创建或更新 Deployment
+    - |
+      sed "s|IMAGE_TAG|$IMAGE_TAG|" ${PROJECT_BASE_NAME}/deployment/${SERVER_NAME}-${DEPLOYMENT}-deployment.yaml | kubectl apply -n $NAMESPACE -f -
+    - kubectl rollout status deployment/${SERVER_NAME} -n $NAMESPACE
