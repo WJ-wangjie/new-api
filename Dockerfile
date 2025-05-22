@@ -7,7 +7,7 @@ COPY ./web .
 COPY ./VERSION .
 RUN DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$(cat VERSION) bun run build
 
-FROM 01ai-registry.cn-shanghai.cr.aliyuncs.com/public/golang:alpine AS builder2
+FROM 01ai-registry-vpc.cn-shanghai.cr.aliyuncs.com/public/golang:alpine AS builder2
 
 ENV GO111MODULE=on \
     GOPROXY=http://nexus.lingyiwanwu.net/repository/go-proxy/ \
