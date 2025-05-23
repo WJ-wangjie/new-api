@@ -41,8 +41,8 @@ spec:
               protocol: TCP
           resources:
             limits:
-              cpu: 4000m
-              memory: 8192Mi
+              cpu: 8000m
+              memory: 16384Mi
             requests:
               cpu: 500m
               memory: 1024Mi
@@ -87,6 +87,16 @@ spec:
   ingressClassName: mse-internal
   rules:
     - host: openapi.lingyiwanwu.net
+      http:
+        paths:
+          - backend:
+              service:
+                name: openapi-platform
+                port:
+                  number: 3000
+            path: /
+            pathType: Prefix
+    - host: openapi.lingyiwanwu.com
       http:
         paths:
           - backend:
