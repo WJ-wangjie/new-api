@@ -11,6 +11,7 @@ import (
 func SetRelayRouter(router *gin.Engine) {
 	router.Use(middleware.CORS())
 	router.Use(middleware.DecompressRequestMiddleware())
+	router.Use(middleware.StatsMiddleware())
 	// https://platform.openai.com/docs/api-reference/introduction
 	modelsRouter := router.Group("/v1/models")
 	modelsRouter.Use(middleware.TokenAuth())
@@ -87,7 +88,6 @@ func SetRelayRouter(router *gin.Engine) {
 		// Gemini API 路径格式: /v1beta/models/{model_name}:{action}
 		relayGeminiRouter.POST("/models/*path", controller.Relay)
 	}
-
 }
 
 func registerMjRouterGroup(relayMjRouter *gin.RouterGroup) {

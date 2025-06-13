@@ -61,6 +61,7 @@ type RelayInfo struct {
 	TokenKey          string
 	UserId            int
 	Group             string
+	UserGroup         string
 	TokenUnlimited    bool
 	StartTime         time.Time
 	FirstResponseTime time.Time
@@ -98,6 +99,7 @@ type RelayInfo struct {
 	UserQuota            int
 	RelayFormat          string
 	SendResponseCount    int
+	ChannelCreateTime    int64
 	ThinkingContentInfo
 	*ClaudeConvertInfo
 	*RerankerInfo
@@ -115,6 +117,8 @@ var streamSupportedChannels = map[int]bool{
 	common.ChannelTypeVolcEngine: true,
 	common.ChannelTypeOllama:     true,
 	common.ChannelTypeXai:        true,
+	common.ChannelTypeDeepSeek:   true,
+	common.ChannelTypeBaiduV2:    true,
 }
 
 func GenRelayInfoWs(c *gin.Context, ws *websocket.Conn) *RelayInfo {
@@ -201,20 +205,22 @@ func GenRelayInfo(c *gin.Context) *RelayInfo {
 		TokenKey:          tokenKey,
 		UserId:            userId,
 		Group:             group,
+		UserGroup:         c.GetString(constant.ContextKeyUserGroup),
 		TokenUnlimited:    tokenUnlimited,
 		StartTime:         startTime,
 		FirstResponseTime: startTime.Add(-time.Second),
 		OriginModelName:   c.GetString("original_model"),
 		UpstreamModelName: c.GetString("original_model"),
 		//RecodeModelName:   c.GetString("original_model"),
-		IsModelMapped:  false,
-		ApiType:        apiType,
-		ApiVersion:     c.GetString("api_version"),
-		ApiKey:         strings.TrimPrefix(c.Request.Header.Get("Authorization"), "Bearer "),
-		Organization:   c.GetString("channel_organization"),
-		ChannelSetting: channelSetting,
-		ParamOverride:  paramOverride,
-		RelayFormat:    RelayFormatOpenAI,
+		IsModelMapped:     false,
+		ApiType:           apiType,
+		ApiVersion:        c.GetString("api_version"),
+		ApiKey:            strings.TrimPrefix(c.Request.Header.Get("Authorization"), "Bearer "),
+		Organization:      c.GetString("channel_organization"),
+		ChannelSetting:    channelSetting,
+		ChannelCreateTime: c.GetInt64("channel_create_time"),
+		ParamOverride:     paramOverride,
+		RelayFormat:       RelayFormatOpenAI,
 		ThinkingContentInfo: ThinkingContentInfo{
 			IsFirstThinkingContent:  true,
 			SendLastThinkingContent: false,
