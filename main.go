@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"one-api/common"
 	"one-api/constant"
 	"one-api/controller"
@@ -174,7 +176,20 @@ func main() {
 	})
 	server.Use(sessions.Sessions("session", store))
 
-	router.SetRouter(server, buildFS, indexPage)
+	// 仅在开发环境启用代理
+	if common.DebugEnabled {
+		// 前端开发服务器地址
+		frontendURL, _ := url.Parse("http://localhost:5173")
+		proxy := httputil.NewSingleHostReverseProxy(frontendURL)
+		server.Any("/*path", func(c *gin.Context) {
+			proxy.ServeHTTP(c.Writer, c.Request)
+		})
+	} else {
+		// 生产环境使用静态文件
+		router.SetRouter(server, buildFS, indexPage)
+	}
+
+	//router.SetRouter(server, buildFS, indexPage)
 	var port = os.Getenv("PORT")
 	if port == "" {
 		port = strconv.Itoa(*common.Port)

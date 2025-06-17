@@ -78,6 +78,15 @@ func DownloadQuotaDates(c *gin.Context) {
 		return
 	}
 
+	//如果是超管 userId=1 改为userid=0 有userid用userid，没有userid用username
+	if userId == 1 {
+		userId = 0
+	} else if username != "" {
+		if userId != 0 {
+			username = ""
+		}
+	}
+
 	// 调用模型层函数获取下载数据
 	dates, err := model.DownloadQuotaData(userId, username, startTimestamp, endTimestamp)
 	if err != nil {

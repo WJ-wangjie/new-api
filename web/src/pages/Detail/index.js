@@ -803,9 +803,10 @@ const Detail = (props) => {
     return newModelColors;
   }, [modelColors]);
 
+  const aggregatedDataChannel = new Map();
+
   const aggregateDataByTimeAndModel = useCallback((data) => {
     const aggregatedData = new Map();
-    let aggregatedDataChannel = new Map();
 
     data.forEach((item) => {
       const timeKey = timestamp2string1(item.created_at, dataExportDefaultTime);
@@ -845,14 +846,10 @@ const Detail = (props) => {
 
     });
 
-    return aggregatedData;
+    return {aggregatedData, aggregatedDataChannel};
   }, [dataExportDefaultTime]);
 
-
-    // 收集所有唯一的渠道名称
-    let uniqueChannels = new Set(data.map((item) => item.channel_name));
-
-    const generateChartTimePoints = useCallback((aggregatedData, data) => {
+  const generateChartTimePoints = useCallback((aggregatedData, data) => {
     let chartTimePoints = Array.from(
       new Set([...aggregatedData.values()].map((d) => d.time)),
     );
@@ -879,7 +876,7 @@ const Detail = (props) => {
     const newModelColors = generateModelColors(uniqueModels);
     setModelColors(newModelColors);
 
-    const aggregatedData = aggregateDataByTimeAndModel(data);
+    const { aggregatedData, aggregatedDataChannel } = aggregateDataByTimeAndModel(data);
 
     const modelTotals = new Map();
     for (let [_, value] of aggregatedData) {
@@ -893,6 +890,10 @@ const Detail = (props) => {
 
     const chartTimePoints = generateChartTimePoints(aggregatedData, data);
     let newLineData = [];
+
+    // 收集所有唯一的渠道名称
+    const uniqueChannels = new Set(data.map((item) => item.channel_name));
+
 
     let newLineDataChannel = [];
 
@@ -914,38 +915,39 @@ const Detail = (props) => {
       newLineData.push(...timeData);
     });
 
-      // 生成分组带渠道的柱状图数据
-      timePoints.forEach((time) => {
-          uniqueChannels.forEach((channel) => {
-              // 为每个时间点和渠道收集所有模型的数据
-              let timeChannelData = Array.from(uniqueModels).map((model) => {
-                  const key = `${time}-${model}-${channel}`;
-                  const aggregatedChannel = aggregatedDataChannel.get(key);
-                  return {
-                      Time: time,
-                      Model: model,
-                      Channel: channel,
-                      rawQuota: aggregatedChannel?.quota || 0,
-                      Usage: aggregatedChannel?.quota ? getQuotaWithUnit(aggregatedChannel.quota, 4) : 0,
-                  };
-              });
+    // 生成分组带渠道的柱状图数据
+    chartTimePoints.forEach((time) => {
+      uniqueChannels.forEach((channel) => {
+        // 为每个时间点和渠道收集所有模型的数据
+        let timeChannelData = Array.from(uniqueModels).map((model) => {
+          const key = `${time}-${model}-${channel}`;
+          const aggregatedChannel = aggregatedDataChannel.get(key);
+          console.log("aggregatedChannel:"+aggregatedChannel)
+          return {
+            Time: time,
+            Model: model,
+            Channel: channel,
+            rawQuota: aggregatedChannel?.quota || 0,
+            Usage: aggregatedChannel?.quota ? getQuotaWithUnit(aggregatedChannel.quota, 4) : 0,
+          };
+        });
 
-              // 计算该时间点和渠道的总计
-              const timeChannelSum = timeChannelData.reduce((sum, item) => sum + item.rawQuota, 0);
+        // 计算该时间点和渠道的总计
+        const timeChannelSum = timeChannelData.reduce((sum, item) => sum + item.rawQuota, 0);
 
-              // 按照 rawQuota 从大到小排序
-              timeChannelData.sort((a, b) => b.rawQuota - a.rawQuota);
+        // 按照 rawQuota 从大到小排序
+        timeChannelData.sort((a, b) => b.rawQuota - a.rawQuota);
 
-              // 为每个数据点添加该时间和渠道的总计
-              timeChannelData = timeChannelData.map((item) => ({
-                  ...item,
-                  TimeSum: timeChannelSum,
-              }));
+        // 为每个数据点添加该时间和渠道的总计
+        timeChannelData = timeChannelData.map((item) => ({
+          ...item,
+          TimeSum: timeChannelSum,
+        }));
 
-              // 将排序后的数据添加到 newLineData
-              newLineDataChannel.push(...timeChannelData);
-          });
+        // 将排序后的数据添加到 newLineData
+        newLineDataChannel.push(...timeChannelData);
       });
+    });
 
       newLineDataChannel.sort((a, b) => a.Time.localeCompare(b.Time));
 
@@ -967,20 +969,15 @@ const Detail = (props) => {
       'barData'
     );
 
+    updateChartSpec(
+        setSpecLineChannel,
+        newLineDataChannel,
+        `${t('总计')}：${renderQuota(totalQuota, 2)}`,
+        newModelColors,
+        'barData'
+    );
 
-      setSpecLineChannel((prev) => ({
-          ...prev,
-          data: [{ id: 'barData', values: newLineDataChannel }],
-          title: {
-              ...prev.title,
-              subtext: `${t('总计')}：${renderQuota(totalQuota, 2)}`,
-          },
-          color: {
-              specified: newModelColors,
-          },
-      }));
-
-      setPieData(newPieData);
+    setPieData(newPieData);
     setLineData(newLineData);
     setLineDataChannel(newLineDataChannel);
     setConsumeQuota(totalQuota);
@@ -1159,17 +1156,6 @@ const Detail = (props) => {
             name: 'username',
             onChange: (value) => handleInputChange(value, 'username')
           })}
-            <Button
-                label={t('下载')}
-                type='secondary'
-                htmlType='button'
-                onClick={downloadQuotaData}
-                loading={loading}
-                style={{ marginTop: 24 }}
-            >
-                {t('下载')}
-            </Button>
-
         </Form>
       </Modal>
 
@@ -1247,30 +1233,39 @@ const Detail = (props) => {
                         {t('调用次数分布')}
                       </span>
                     } itemKey="2" />
-                      <Tabs.TabPane tab={t('调用次数分布-按渠道分组')} itemKey='3'>
-                          <div style={{ height: 500 }}>
-                              <VChart
-                                  spec={spec_line_channel}
-                                  option={{ mode: 'desktop-browser' }}
-                              />
-                          </div>
-                      </Tabs.TabPane>
+                    <TabPane tab={
+                      <span>
+                        <IconHistogram />
+                        {t('调用次数分布-按渠道分组')}
+                      </span>
+                    } itemKey="3" />
                   </Tabs>
+                  <button
+                      className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600"
+                      onClick={downloadQuotaData}
+                  >
+                    {t('下载明细数据')}
+                  </button>
                 </div>
               }
             >
               <div style={{ height: 400 }}>
                 {activeChartTab === '1' ? (
-                  <VChart
-                    spec={spec_line}
-                    option={CHART_CONFIG}
-                  />
-                ) : (
-                  <VChart
-                    spec={spec_pie}
-                    option={CHART_CONFIG}
-                  />
-                )}
+                    <VChart
+                        spec={spec_line}
+                        option={CHART_CONFIG}
+                    />
+                ) : activeChartTab === '2' ? (
+                    <VChart
+                        spec={spec_pie}
+                        option={CHART_CONFIG}
+                    />
+                ) : activeChartTab === '3' ? (
+                    <VChart
+                        spec={spec_line_channel}
+                        option={CHART_CONFIG}
+                    />
+                ):null}
               </div>
             </Card>
 
